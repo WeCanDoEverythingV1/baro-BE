@@ -20,8 +20,8 @@ public class ApprovalRequestController {
 
     @PostMapping
     public ResponseEntity<ApprovalRequestResponseDto> create(
-            @Valid @RequestBody ApprovalRequestCreateDto dto) {
-        ApprovalRequestResponseDto created = service.create(dto);
+            @Valid @RequestBody ApprovalRequestCreateDto request) {
+        ApprovalRequestResponseDto created = service.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
