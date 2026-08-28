@@ -1,13 +1,13 @@
 package wecandoeverything.ledgerly.dto;
 
 import jakarta.validation.constraints.*;
-import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 
 @Getter
-@Builder
+@NoArgsConstructor
 public class SubscriptionDto {
 
     @NotBlank(message = "id is required")

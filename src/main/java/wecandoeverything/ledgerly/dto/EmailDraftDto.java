@@ -1,10 +1,10 @@
 package wecandoeverything.ledgerly.dto;
 
-import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Getter
-@Builder
+@NoArgsConstructor
 public class EmailDraftDto {
     private String subject;
     private String body;

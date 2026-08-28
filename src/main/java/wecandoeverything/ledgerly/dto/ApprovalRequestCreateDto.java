@@ -10,7 +10,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Getter
-@Setter
 public class ApprovalRequestCreateDto {
 
     @NotBlank(message = "employeeName is required")
