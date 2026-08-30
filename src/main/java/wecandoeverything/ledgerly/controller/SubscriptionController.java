@@ -30,6 +30,6 @@ public class SubscriptionController {
     @PostMapping("/draft-email")
     public ResponseEntity<EmailDraftDto> draftEmail(
             @Valid @RequestBody EmailDraftRequestDto request) {
-        return ResponseEntity.ok(emailDraftService.draft(request.getSubscription(), request.getAction()));
+        return ResponseEntity.ok(emailDraftService.draft(request.getSubscription(), request.getAction(), request.getLanguage()));
     }
 }
