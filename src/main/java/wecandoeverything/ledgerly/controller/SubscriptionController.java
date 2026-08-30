@@ -29,7 +29,7 @@ public class SubscriptionController {
 
     @PostMapping("/draft-email")
     public ResponseEntity<EmailDraftDto> draftEmail(
-            @RequestBody EmailDraftRequestDto request) {
+            @Valid @RequestBody EmailDraftRequestDto request) {
         return ResponseEntity.ok(emailDraftService.draft(request.getSubscription(), request.getAction()));
     }
 }
