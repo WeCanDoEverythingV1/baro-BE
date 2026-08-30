@@ -23,15 +23,24 @@ public class EmailDraftService {
         BigDecimal waste = calculator.monthlyWaste(sub);
 
         String prompt = """
-                Write a professional vendor email from a finance operations team.
-                Action requested: %s
-                Vendor: %s
-                Current seats: %d, active seats: %d, idle seats: %d
-                Estimated monthly waste: $%.2f
-                Last used: %s
+        Write a professional vendor email from a finance operations team,
+        requesting a subscription plan change. Structure it as 4-5 short
+        paragraphs:
+        1. Greeting and brief context (who you are, why you're writing)
+        2. The specific usage data driving this request (seats, activity)
+        3. The financial impact and the specific change requested
+        4. A clear ask (confirm rate, effective date, any paperwork needed)
+        5. Polite closing
 
-                Keep it concise, polite, and specific to these numbers.
-                """.formatted(action, sub.getName(), sub.getSeats(), sub.getActiveSeats(),
+        Action requested: %s
+        Vendor: %s
+        Current seats: %d, active seats: %d, idle seats: %d
+        Estimated monthly waste: $%.2f
+        Last used: %s
+
+        Match the tone and thoroughness of a real B2B vendor-management email —
+        not a one-paragraph note.
+        """.formatted(action, sub.getName(), sub.getSeats(), sub.getActiveSeats(),
                 idle, waste, sub.getLastUsed());
 
         Map<String, Object> schema = Map.of(
