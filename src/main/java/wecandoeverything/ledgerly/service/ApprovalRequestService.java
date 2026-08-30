@@ -30,6 +30,7 @@ public class ApprovalRequestService {
                 .itemName(dto.getItemName())
                 .purpose(dto.getPurpose())
                 .status(ApprovalStatus.PENDING)
+                .category(dto.getExpenseCategory())
                 .build();
 
         ApprovalRequest saved = repository.save(entity);
@@ -78,6 +79,7 @@ public class ApprovalRequestService {
                 .purpose(entity.getPurpose())
                 .status(entity.getStatus())
                 .createdAt(entity.getCreatedAt())
+                .expenseCategory(entity.getCategory())
                 .build();
     }
 }

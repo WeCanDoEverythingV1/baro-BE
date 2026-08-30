@@ -6,12 +6,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import tools.jackson.databind.ObjectMapper;
+import wecandoeverything.ledgerly.domain.ApprovalRequest;
+import wecandoeverything.ledgerly.domain.ExpenseCategory;
 import wecandoeverything.ledgerly.dto.ReceiptScanResultDto;
 import wecandoeverything.ledgerly.exception.ReceiptUnreadableException;
+import wecandoeverything.ledgerly.repository.ApprovalRequestRepository;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -21,29 +25,33 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class ReceiptScanService {
 
-    private static final Logger log = LoggerFactory.getLogger(ReceiptScanService.class);
-
     private static final Set<String> ALLOWED_TYPES =
             Set.of("image/jpeg", "image/png", "application/pdf");
 
+    private static final List<String> CATEGORY_NAMES =
+            Arrays.stream(ExpenseCategory.values()).map(Enum::name).toList();
+
     private final GeminiClient geminiClient;
+    private final ApprovalRequestRepository approvalRequestRepository;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public ReceiptScanResultDto scan(MultipartFile file) {
         validate(file);
-
         String base64 = encode(file);
+
         String prompt = """
                 You are reading a business expense receipt. Extract the following
-                fields from the image. If a field is genuinely not visible on the
-                receipt, return an empty string for text fields or 0 for amount —
-                do not guess or invent values.
+                fields. If a field is genuinely not visible, return an empty
+                string for text fields or 0 for amount — do not guess or invent
+                values.
 
                 - merchant: the business name
                 - date: the transaction date, formatted exactly as YYYY-MM-DD
-                - amount: the total amount paid, as a plain number (no currency symbol)
+                - amount: the total amount paid, as a plain number
                 - itemName: a short 3-6 word description of what was purchased
-                - purpose: leave this as an empty string — the employee will fill it in
+                - category: classify the purchase into exactly one of the
+                  allowed categories, based on what was purchased
+                - purpose: leave this as an empty string — the employee fills it in
                 """;
 
         Map<String, Object> schema = Map.of(
@@ -53,13 +61,35 @@ public class ReceiptScanService {
                         "date", Map.of("type", "STRING"),
                         "amount", Map.of("type", "NUMBER"),
                         "itemName", Map.of("type", "STRING"),
+                        "category", Map.of("type", "STRING", "enum", CATEGORY_NAMES),
                         "purpose", Map.of("type", "STRING")
                 ),
-                "required", List.of("merchant", "date", "amount", "itemName", "purpose")
+                "required", List.of("merchant", "date", "amount", "itemName", "category", "purpose")
         );
 
         String json = geminiClient.generate(prompt, schema, file.getContentType(), base64);
-        return toDto(json);
+        ReceiptScanResultDto result = toDto(json);
+        return applyDuplicateCheck(result);
+    }
+
+    private ReceiptScanResultDto applyDuplicateCheck(ReceiptScanResultDto result) {
+        List<ApprovalRequest> matches = approvalRequestRepository
+                .findByMerchantIgnoreCaseAndAmount(result.getMerchant(), result.getAmount());
+
+        boolean duplicateFound = matches.stream().anyMatch(existing ->
+                result.getDate() != null &&
+                        Math.abs(java.time.temporal.ChronoUnit.DAYS.between(existing.getDate(), result.getDate())) <= 3
+        );
+
+        if (!duplicateFound) {
+            return result;
+        }
+
+        return result.toBuilder()
+                .possibleDuplicate(true)
+                .duplicateNote("A similar request for " + result.getMerchant() +
+                        " ($" + result.getAmount() + ") was already submitted within the last few days.")
+                .build();
     }
 
     private void validate(MultipartFile file) {
@@ -67,7 +97,6 @@ public class ReceiptScanService {
             throw new IllegalArgumentException("File is empty");
         }
         String contentType = file.getContentType();
-        log.info("Received file with content type: {}", contentType);
         if (!ALLOWED_TYPES.contains(contentType)) {
             throw new IllegalArgumentException(
                     "Unsupported file type: " + file.getContentType() + ". Use JPG, PNG, or PDF.");
@@ -98,6 +127,7 @@ public class ReceiptScanService {
                     .amount(BigDecimal.valueOf(((Number) parsed.get("amount")).doubleValue()))
                     .itemName((String) parsed.get("itemName"))
                     .purpose((String) parsed.get("purpose"))
+                    .category((String) parsed.get("category"))
                     .build();
         } catch (ReceiptUnreadableException e) {
             throw e;

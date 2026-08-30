@@ -7,7 +7,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import wecandoeverything.ledgerly.domain.BaseEntity;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -46,6 +45,10 @@ public class ApprovalRequest extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ApprovalStatus status;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ExpenseCategory category;
 
     @PrePersist
     protected void onCreate() {

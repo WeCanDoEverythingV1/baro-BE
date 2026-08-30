@@ -3,6 +3,7 @@ package wecandoeverything.ledgerly.dto;
 import lombok.Builder;
 import lombok.Getter;
 import wecandoeverything.ledgerly.domain.ApprovalStatus;
+import wecandoeverything.ledgerly.domain.ExpenseCategory;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -20,4 +21,5 @@ public class ApprovalRequestResponseDto {
     private String purpose;
     private ApprovalStatus status;
     private LocalDateTime createdAt;
+    private ExpenseCategory expenseCategory;
 }
