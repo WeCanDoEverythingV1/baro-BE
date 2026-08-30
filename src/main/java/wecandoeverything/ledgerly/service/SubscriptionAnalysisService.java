@@ -8,7 +8,6 @@ import tools.jackson.databind.ObjectMapper;
 import wecandoeverything.ledgerly.dto.SubscriptionDto;
 import wecandoeverything.ledgerly.dto.SubscriptionAnalysisDto;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -76,7 +75,4 @@ public class SubscriptionAnalysisService {
             throw new IllegalStateException("Failed to parse Gemini recommendations: " + json, e);
         }
     }
-
-    // TODO : understand what claude said lastly
-    // TODO : update the blog contents to fit this code
 }

@@ -8,7 +8,6 @@ import wecandoeverything.ledgerly.dto.EmailDraftDto;
 import wecandoeverything.ledgerly.dto.EmailDraftRequestDto;
 import wecandoeverything.ledgerly.dto.SubscriptionAnalysisDto;
 import wecandoeverything.ledgerly.dto.SubscriptionAnalysisRequest;
-import wecandoeverything.ledgerly.dto.SubscriptionDto;
 import wecandoeverything.ledgerly.service.EmailDraftService;
 import wecandoeverything.ledgerly.service.SubscriptionAnalysisService;
 
