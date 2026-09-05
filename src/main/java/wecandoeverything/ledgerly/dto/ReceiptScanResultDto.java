@@ -2,7 +2,6 @@ package wecandoeverything.ledgerly.dto;
 
 import lombok.Builder;
 import lombok.Getter;
-import wecandoeverything.ledgerly.domain.RiskLevel;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

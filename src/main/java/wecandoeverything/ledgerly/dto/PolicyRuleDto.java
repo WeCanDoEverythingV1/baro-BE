@@ -6,7 +6,6 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import wecandoeverything.ledgerly.domain.CitedClause;
 import wecandoeverything.ledgerly.domain.ExpenseCategory;
 import wecandoeverything.ledgerly.domain.RuleConditions;
 import wecandoeverything.ledgerly.domain.RuleScope;

@@ -1,7 +1,6 @@
 package wecandoeverything.ledgerly.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
-import wecandoeverything.ledgerly.domain.ExpenseCategory;
 import wecandoeverything.ledgerly.domain.PolicyRule;
 
 import java.util.List;

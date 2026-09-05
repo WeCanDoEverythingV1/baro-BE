@@ -2,7 +2,6 @@ package wecandoeverything.ledgerly.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import wecandoeverything.ledgerly.domain.ApprovalRequest;
-import wecandoeverything.ledgerly.domain.ApprovalStatus;
 
 import java.math.BigDecimal;
 import java.util.List;
