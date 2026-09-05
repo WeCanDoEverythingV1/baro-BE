@@ -91,8 +91,8 @@ public class ReceiptScanService {
 
         return result.toBuilder()
                 .possibleDuplicate(true)
-                .duplicateNote("A similar request for " + result.getMerchant() +
-                        " ($" + result.getAmount() + ") was already submitted within the last few days.")
+                .duplicateNote("비슷한 요청" + result.getMerchant() +
+                        " (₩`" + result.getAmount() + ") 이 이미 있습니다.")
                 .build();
     }
 
