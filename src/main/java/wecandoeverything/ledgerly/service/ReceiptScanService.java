@@ -52,6 +52,8 @@ public class ReceiptScanService {
                 - category: classify the purchase into exactly one of the
                   allowed categories, based on what was purchased
                 - purpose: leave this as an empty string — the employee fills it in
+                
+                Write in korean.
                 """;
 
         Map<String, Object> schema = Map.of(
