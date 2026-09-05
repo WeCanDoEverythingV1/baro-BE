@@ -86,6 +86,8 @@ public class PolicyExtractionService {
                   tiered process in the note field. Do NOT create two separate rules for the
                   same clause.
                 - Every clause must appear in EITHER rules OR unmappedClauses, never both.
+                
+                Write in korean.
 
                 Do not fabricate any limit, category, or condition not clearly
                 supported by the document text.
