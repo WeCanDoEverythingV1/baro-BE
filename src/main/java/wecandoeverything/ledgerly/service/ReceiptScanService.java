@@ -51,7 +51,7 @@ public class ReceiptScanService {
                 - itemName: a short 3-6 word description of what was purchased
                 - category: classify the purchase into exactly one of the
                   allowed categories, based on what was purchased
-                - purpose: leave this as an empty string — the employee fills it in
+                - purpose: the purpose
                 
                 Write in korean.
                 """;
