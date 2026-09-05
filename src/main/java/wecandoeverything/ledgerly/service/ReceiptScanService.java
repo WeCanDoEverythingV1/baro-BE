@@ -1,8 +1,6 @@
 package wecandoeverything.ledgerly.service;
 
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import tools.jackson.databind.ObjectMapper;
@@ -33,6 +31,7 @@ public class ReceiptScanService {
 
     private final GeminiClient geminiClient;
     private final ApprovalRequestRepository approvalRequestRepository;
+    private final RiskAnalysisService riskAnalysisService;
     private final ObjectMapper mapper = new ObjectMapper();
 
     public ReceiptScanResultDto scan(MultipartFile file) {
@@ -51,7 +50,12 @@ public class ReceiptScanService {
                 - itemName: a short 3-6 word description of what was purchased
                 - category: classify the purchase into exactly one of the
                   allowed categories, based on what was purchased
-                - purpose: the purpose
+                - purpose: infer a short, plausible business reason for this
+                  expense based on the merchant and items alone (e.g. a coffee
+                  shop receipt might suggest "고객 미팅" or "팀 업무 논의").
+                  Be specific where the receipt gives any hint, but keep it
+                  brief — one short phrase. This is a draft suggestion the
+                  employee will review and can edit, not a claim of fact.
                 
                 Write in korean.
                 """;
@@ -83,9 +87,7 @@ public class ReceiptScanService {
                         Math.abs(java.time.temporal.ChronoUnit.DAYS.between(existing.getDate(), result.getDate())) <= 3
         );
 
-        if (!duplicateFound) {
-            return result;
-        }
+        if (!duplicateFound) return result;
 
         return result.toBuilder()
                 .possibleDuplicate(true)
@@ -99,9 +101,9 @@ public class ReceiptScanService {
             throw new IllegalArgumentException("File is empty");
         }
         String contentType = file.getContentType();
-        if (!ALLOWED_TYPES.contains(contentType)) {
+        if (contentType == null || !ALLOWED_TYPES.contains(contentType.toLowerCase())) {
             throw new IllegalArgumentException(
-                    "Unsupported file type: " + file.getContentType() + ". Use JPG, PNG, or PDF.");
+                    "Unsupported file type: " + contentType + ". Use JPG, PNG, or PDF.");
         }
     }
 
@@ -128,8 +130,8 @@ public class ReceiptScanService {
                     .date(parseDate((String) parsed.get("date")))
                     .amount(BigDecimal.valueOf(((Number) parsed.get("amount")).doubleValue()))
                     .itemName((String) parsed.get("itemName"))
-                    .purpose((String) parsed.get("purpose"))
                     .category((String) parsed.get("category"))
+                    .purpose((String) parsed.get("purpose"))
                     .build();
         } catch (ReceiptUnreadableException e) {
             throw e;
@@ -142,7 +144,7 @@ public class ReceiptScanService {
         try {
             return LocalDate.parse(raw);
         } catch (Exception e) {
-            return null; // let the employee fill it in manually rather than failing the whole scan
+            return null;
         }
     }
 }

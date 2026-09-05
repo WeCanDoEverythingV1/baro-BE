@@ -7,9 +7,11 @@ import wecandoeverything.ledgerly.domain.ApprovalRequest;
 import wecandoeverything.ledgerly.domain.ExpenseCategory;
 import wecandoeverything.ledgerly.domain.RiskLevel;
 import wecandoeverything.ledgerly.dto.RiskAnalysisDto;
+import wecandoeverything.ledgerly.repository.ApprovalRequestRepository;
 
 import java.math.BigDecimal;
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -40,47 +42,20 @@ public class RiskAnalysisService {
     }};
 
     private final GeminiClient geminiClient;
+    private final ApprovalRequestRepository repository;
     private final ObjectMapper mapper = new ObjectMapper();
+
+    // ---------- Approver's list view: batch, entities already persisted ----------
 
     public Map<Long, RiskAnalysisDto> analyzeAll(List<ApprovalRequest> requests) {
         if (requests.isEmpty()) return Map.of();
 
-        Map<String, Set<String>> merchantsByEmployee = new HashMap<>();
-        for (ApprovalRequest r : requests) {
-            merchantsByEmployee
-                    .computeIfAbsent(r.getEmployeeName(), k -> new HashSet<>())
-                    .add(r.getMerchant().toLowerCase());
-        }
-
         String lines = requests.stream()
-                .map(r -> describeWithFacts(r, requests, merchantsByEmployee))
+                .map(r -> describeLine(
+                        r.getId().toString(), r.getMerchant(), r.getCategory(), r.getAmount(),
+                        r.getItemName(), r.getPurpose(), r.getDate(),
+                        isNewMerchantWithinList(r, requests)))
                 .collect(Collectors.joining("\n"));
-
-        String prompt = """
-                You are reviewing company expense requests for policy risk. For each
-                request, choose exactly ONE label that best fits — prioritizing in
-                this order when multiple conditions could apply:
-
-                1. "위험: 예산 초과" — flaggedOverBudget is true
-                2. "위험: 정책 위반 품목" — the item or purpose describes something
-                   that is NOT a legitimate business expense (alcohol, personal
-                   entertainment, gifts to individuals, etc.) — use your judgment
-                   on the actual text, not just the category label
-                3. "주의: 카테고리 불일치" — the stated category clearly doesn't match
-                   what the item/purpose actually describes
-                4. "주의: 모호한 목적 설명" — the purpose text is too generic or vague
-                   to justify the expense (e.g. "misc", "업무 관련", no real detail)
-                5. "주의: 고액 지출" — flaggedHighAmount is true
-                6. "주의: 신규 가맹점" — flaggedNewMerchant is true
-                7. "주의: 주말 지출" — flaggedWeekend is true
-                8. "규정 준수" — none of the above apply
-
-                Only use labels 2-4 based on genuinely reading the item/purpose
-                text — do not guess or apply them without real textual evidence.
-
-                Requests:
-                %s
-                """.formatted(lines);
 
         Map<String, Object> schema = Map.of(
                 "type", "ARRAY",
@@ -88,8 +63,7 @@ public class RiskAnalysisService {
                         "type", "OBJECT",
                         "properties", Map.of(
                                 "id", Map.of("type", "STRING"),
-                                "label", Map.of("type", "STRING",
-                                        "enum", new ArrayList<>(LABEL_TO_LEVEL.keySet()))
+                                "label", Map.of("type", "STRING", "enum", new ArrayList<>(LABEL_TO_LEVEL.keySet()))
                         ),
                         "required", List.of("id", "label")
                 )
@@ -97,15 +71,10 @@ public class RiskAnalysisService {
 
         List<Map<String, String>> parsed;
         try {
-            String json = geminiClient.generate(prompt, schema);
+            String json = geminiClient.generate(buildBatchPrompt(lines), schema);
             parsed = mapper.readValue(json, List.class);
         } catch (Exception e) {
-            return requests.stream().collect(Collectors.toMap(
-                    ApprovalRequest::getId,
-                    r -> RiskAnalysisDto.builder()
-                            .level(RiskLevel.COMPLIANT)
-                            .label("규정 준수")
-                            .build()));
+            return requests.stream().collect(Collectors.toMap(ApprovalRequest::getId, r -> compliantFallback()));
         }
 
         Map<String, String> idToLabel = parsed.stream()
@@ -113,53 +82,103 @@ public class RiskAnalysisService {
 
         return requests.stream().collect(Collectors.toMap(
                 ApprovalRequest::getId,
-                r -> {
-                    String label = idToLabel.getOrDefault(r.getId().toString(), "규정 준수");
-                    return RiskAnalysisDto.builder()
-                            .level(LABEL_TO_LEVEL.getOrDefault(label, RiskLevel.COMPLIANT))
-                            .label(label)
-                            .build();
-                }));
+                r -> toDto(idToLabel.getOrDefault(r.getId().toString(), "규정 준수"))));
     }
 
-    private String describeWithFacts(ApprovalRequest r, List<ApprovalRequest> all,
-                                     Map<String, Set<String>> merchantsByEmployee) {
-        boolean overBudget = exceedsBudget(r);
-        boolean highAmount = !overBudget && isHighButUnderLimit(r);
-        boolean weekend = isWeekend(r);
-        boolean newMerchant = isNewMerchant(r, all, merchantsByEmployee);
+    // ---------- Receipt scan: single not-yet-persisted draft ----------
 
-        return """
-                - id=%s, merchant=%s, category=%s, amount=%s, itemName="%s", purpose="%s", date=%s, \
-                flaggedOverBudget=%b, flaggedHighAmount=%b, flaggedWeekend=%b, flaggedNewMerchant=%b\
-                """.formatted(r.getId(), r.getMerchant(), r.getCategory(), r.getAmount(),
-                r.getItemName(), r.getPurpose(), r.getDate(),
-                overBudget, highAmount, weekend, newMerchant);
+    public RiskAnalysisDto analyzeDraft(String employeeName, String merchant, ExpenseCategory category,
+                                        BigDecimal amount, String itemName, String purpose, LocalDate date) {
+        boolean newMerchant = !repository.existsByEmployeeNameIgnoreCaseAndMerchantIgnoreCase(employeeName, merchant);
+        String line = describeLine("draft", merchant, category, amount, itemName, purpose, date, newMerchant);
+
+        Map<String, Object> schema = Map.of(
+                "type", "OBJECT",
+                "properties", Map.of(
+                        "label", Map.of("type", "STRING", "enum", new ArrayList<>(LABEL_TO_LEVEL.keySet()))
+                ),
+                "required", List.of("label")
+        );
+
+        try {
+            String json = geminiClient.generate(buildSinglePrompt(line), schema);
+            Map<String, String> parsed = mapper.readValue(json, Map.class);
+            return toDto(parsed.getOrDefault("label", "규정 준수"));
+        } catch (Exception e) {
+            return compliantFallback();
+        }
     }
 
-    private boolean exceedsBudget(ApprovalRequest request) {
-        BigDecimal limit = BUDGET_LIMITS.getOrDefault(
-                request.getCategory(), BUDGET_LIMITS.get(ExpenseCategory.OTHER));
-        return request.getAmount().compareTo(limit) > 0;
+    // ---------- Shared fact computation ----------
+
+    private boolean isNewMerchantWithinList(ApprovalRequest r, List<ApprovalRequest> all) {
+        return all.stream()
+                .filter(other -> !other.getId().equals(r.getId()))
+                .noneMatch(other -> other.getEmployeeName().equals(r.getEmployeeName())
+                        && other.getMerchant().equalsIgnoreCase(r.getMerchant()));
     }
 
-    private boolean isHighButUnderLimit(ApprovalRequest r) {
-        BigDecimal limit = BUDGET_LIMITS.getOrDefault(r.getCategory(), BUDGET_LIMITS.get(ExpenseCategory.OTHER));
-        return r.getAmount().compareTo(limit.multiply(WARNING_RATIO)) > 0;
+    private boolean exceedsBudget(ExpenseCategory category, BigDecimal amount) {
+        BigDecimal limit = BUDGET_LIMITS.getOrDefault(category, BUDGET_LIMITS.get(ExpenseCategory.OTHER));
+        return amount.compareTo(limit) > 0;
     }
 
-    private boolean isWeekend(ApprovalRequest request) {
-        DayOfWeek day = request.getDate().getDayOfWeek();
+    private boolean isHighButUnderLimit(ExpenseCategory category, BigDecimal amount) {
+        BigDecimal limit = BUDGET_LIMITS.getOrDefault(category, BUDGET_LIMITS.get(ExpenseCategory.OTHER));
+        return !exceedsBudget(category, amount) && amount.compareTo(limit.multiply(WARNING_RATIO)) > 0;
+    }
+
+    private boolean isWeekend(LocalDate date) {
+        DayOfWeek day = date.getDayOfWeek();
         return day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY;
     }
 
-    private boolean isNewMerchant(ApprovalRequest r, List<ApprovalRequest> all,
-                                  Map<String, Set<String>> merchantsByEmployee) {
-        long priorCount = all.stream()
-                .filter(other -> !other.getId().equals(r.getId()))
-                .filter(other -> other.getEmployeeName().equals(r.getEmployeeName()))
-                .filter(other -> other.getMerchant().equalsIgnoreCase(r.getMerchant()))
-                .count();
-        return priorCount == 0;
+    private String describeLine(String id, String merchant, ExpenseCategory category, BigDecimal amount,
+                                String itemName, String purpose, LocalDate date, boolean newMerchant) {
+        return "- id=%s, merchant=%s, category=%s, amount=%s, itemName=\"%s\", purpose=\"%s\", date=%s, flaggedOverBudget=%b, flaggedHighAmount=%b, flaggedWeekend=%b, flaggedNewMerchant=%b"
+                .formatted(id, merchant, category, amount, itemName, purpose, date,
+                        exceedsBudget(category, amount), isHighButUnderLimit(category, amount),
+                        isWeekend(date), newMerchant);
+    }
+
+    private String buildBatchPrompt(String lines) {
+        return "You are reviewing company expense requests for policy risk. For each request, choose exactly ONE label that best fits — prioritizing in this order when multiple conditions could apply:\n"
+                + labelGuide() + "\n\nRequests:\n" + lines;
+    }
+
+    private String buildSinglePrompt(String line) {
+        return "You are reviewing a single company expense request for policy risk. Choose exactly ONE label that best fits — prioritizing in this order when multiple conditions could apply:\n"
+                + labelGuide() + "\n\nRequest:\n" + line;
+    }
+
+    private String labelGuide() {
+        return """
+                1. "위험: 예산 초과" — flaggedOverBudget is true
+                2. "위험: 정책 위반 품목" — the item or purpose describes something
+                   that is NOT a legitimate business expense — use your judgment
+                   on the actual text, not just the category label
+                3. "주의: 카테고리 불일치" — the stated category clearly doesn't match
+                   what the item/purpose actually describes
+                4. "주의: 모호한 목적 설명" — the purpose text is too generic or vague
+                   to justify the expense (empty or missing purpose also counts)
+                5. "주의: 고액 지출" — flaggedHighAmount is true
+                6. "주의: 신규 가맹점" — flaggedNewMerchant is true
+                7. "주의: 주말 지출" — flaggedWeekend is true
+                8. "규정 준수" — none of the above apply
+
+                Only use labels 2-4 based on genuinely reading the item/purpose
+                text — do not guess without real textual evidence.
+                """;
+    }
+
+    private RiskAnalysisDto toDto(String label) {
+        return RiskAnalysisDto.builder()
+                .level(LABEL_TO_LEVEL.getOrDefault(label, RiskLevel.COMPLIANT))
+                .label(label)
+                .build();
+    }
+
+    private RiskAnalysisDto compliantFallback() {
+        return toDto("규정 준수");
     }
 }

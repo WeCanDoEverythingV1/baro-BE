@@ -22,4 +22,5 @@ public class ApprovalRequestResponseDto {
     private ApprovalStatus status;
     private LocalDateTime createdAt;
     private ExpenseCategory expenseCategory;
+    private RiskAnalysisDto risk;
 }

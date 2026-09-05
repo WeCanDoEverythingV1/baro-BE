@@ -8,10 +8,12 @@ import wecandoeverything.ledgerly.domain.ApprovalRequest;
 import wecandoeverything.ledgerly.domain.ApprovalStatus;
 import wecandoeverything.ledgerly.dto.ApprovalRequestCreateDto;
 import wecandoeverything.ledgerly.dto.ApprovalRequestResponseDto;
+import wecandoeverything.ledgerly.dto.RiskAnalysisDto;
 import wecandoeverything.ledgerly.exception.ApprovalRequestNotFoundException;
 import wecandoeverything.ledgerly.repository.ApprovalRequestRepository;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -19,6 +21,7 @@ import java.util.List;
 public class ApprovalRequestService {
 
     private final ApprovalRequestRepository repository;
+    private final RiskAnalysisService riskAnalysisService;
 
     @Transactional
     public ApprovalRequestResponseDto create(ApprovalRequestCreateDto dto) {
@@ -34,22 +37,24 @@ public class ApprovalRequestService {
                 .build();
 
         ApprovalRequest saved = repository.save(entity);
-        return toResponseDto(saved);
+        return toResponseDto(saved, null);
     }
 
     public List<ApprovalRequestResponseDto> getPending() {
-        return repository.findByStatusOrderByCreatedAtDesc(ApprovalStatus.PENDING)
-                .stream()
-                .map(this::toResponseDto)
-                .toList();
+        return getByStatus(ApprovalStatus.PENDING);
     }
 
     public List<ApprovalRequestResponseDto> getByStatus(ApprovalStatus status) {
-        List<ApprovalRequest> requests = (status == null)
-                ? repository.findAllByOrderByCreatedAtDesc()
-                : repository.findByStatusOrderByCreatedAtDesc(status);
+        List<ApprovalRequest> all = repository.findAllByOrderByCreatedAtDesc();
+        List<ApprovalRequest> filtered = (status == null)
+                ? all
+                : all.stream().filter(r -> r.getStatus() == status).toList();
 
-        return requests.stream().map(this::toResponseDto).toList();
+        Map<Long, RiskAnalysisDto> riskById = riskAnalysisService.analyzeAll(all);
+
+        return filtered.stream()
+                .map(r -> toResponseDto(r, riskById.get(r.getId())))
+                .toList();
     }
 
     @Transactional
@@ -66,10 +71,10 @@ public class ApprovalRequestService {
         ApprovalRequest entity = repository.findById(id)
                 .orElseThrow(() -> new ApprovalRequestNotFoundException(id));
         entity.setStatus(newStatus);
-        return toResponseDto(entity);
+        return toResponseDto(entity, null);
     }
 
-    private ApprovalRequestResponseDto toResponseDto(ApprovalRequest entity) {
+    private ApprovalRequestResponseDto toResponseDto(ApprovalRequest entity, RiskAnalysisDto risk) {
         return ApprovalRequestResponseDto.builder()
                 .id(entity.getId())
                 .employeeName(entity.getEmployeeName())
@@ -81,6 +86,7 @@ public class ApprovalRequestService {
                 .status(entity.getStatus())
                 .createdAt(entity.getCreatedAt())
                 .expenseCategory(entity.getCategory())
+                .risk(risk)
                 .build();
     }
 }

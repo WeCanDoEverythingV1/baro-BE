@@ -2,6 +2,7 @@ package wecandoeverything.ledgerly.dto;
 
 import lombok.Builder;
 import lombok.Getter;
+import wecandoeverything.ledgerly.domain.RiskLevel;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -17,4 +18,6 @@ public class ReceiptScanResultDto {
     private String category;
     private boolean possibleDuplicate;
     private String duplicateNote; // null when no duplicate found
+    private RiskLevel risk;
+
 }

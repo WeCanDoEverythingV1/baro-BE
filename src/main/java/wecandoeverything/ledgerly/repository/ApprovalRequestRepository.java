@@ -9,9 +9,9 @@ import java.util.List;
 
 public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest, Long> {
 
-    List<ApprovalRequest> findByStatusOrderByCreatedAtDesc(ApprovalStatus status);
-
     List<ApprovalRequest> findAllByOrderByCreatedAtDesc();
 
     List<ApprovalRequest> findByMerchantIgnoreCaseAndAmount(String merchant, BigDecimal amount);
+
+    boolean existsByEmployeeNameIgnoreCaseAndMerchantIgnoreCase(String employeeName, String merchant);
 }
