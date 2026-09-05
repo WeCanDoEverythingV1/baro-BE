@@ -44,11 +44,12 @@ public class ApprovalRequestService {
                 .toList();
     }
 
-    public List<ApprovalRequestResponseDto> getAll() {
-        return repository.findAllByOrderByCreatedAtDesc()
-                .stream()
-                .map(this::toResponseDto)
-                .toList();
+    public List<ApprovalRequestResponseDto> getByStatus(ApprovalStatus status) {
+        List<ApprovalRequest> requests = (status == null)
+                ? repository.findAllByOrderByCreatedAtDesc()
+                : repository.findByStatusOrderByCreatedAtDesc(status);
+
+        return requests.stream().map(this::toResponseDto).toList();
     }
 
     @Transactional

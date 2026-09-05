@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import wecandoeverything.ledgerly.domain.ApprovalStatus;
 import wecandoeverything.ledgerly.dto.ApprovalRequestCreateDto;
 import wecandoeverything.ledgerly.dto.ApprovalRequestResponseDto;
 import wecandoeverything.ledgerly.service.ApprovalRequestService;
@@ -29,13 +30,6 @@ public class ApprovalRequestController {
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
-    @Operation(summary = "Get all approval requests")
-    @GetMapping
-    public ResponseEntity<List<ApprovalRequestResponseDto>> getAll() {
-        return ResponseEntity.ok(service.getAll());
-    }
-
-
     @Operation(summary = "Get all pending approval requests")
     @GetMapping("/pending")
     public ResponseEntity<List<ApprovalRequestResponseDto>> getPending() {
@@ -52,5 +46,12 @@ public class ApprovalRequestController {
     @PatchMapping("/{id}/reject")
     public ResponseEntity<ApprovalRequestResponseDto> reject(@PathVariable Long id) {
         return ResponseEntity.ok(service.reject(id));
+    }
+
+    @Operation(summary = "List approval requests, optionally filtered by status")
+    @GetMapping
+    public ResponseEntity<List<ApprovalRequestResponseDto>> getAll(
+            @RequestParam(value = "status", required = false) ApprovalStatus status) {
+        return ResponseEntity.ok(service.getByStatus(status));
     }
 }
