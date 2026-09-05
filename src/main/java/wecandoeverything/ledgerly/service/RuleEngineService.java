@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
 public class RuleEngineService {
@@ -40,7 +41,11 @@ public class RuleEngineService {
         // 2. Only rules matching this expense's category are relevant from here on.
         List<PolicyRule> categoryRules = allRules.stream()
                 .filter(r -> r.getExpenseCategory() == input.getCategory())
-                .toList();
+                .collect(Collectors.toMap(
+                        r -> r.getScope() + "|" + r.getLimitAmount(),
+                        r -> r,
+                        (a, b) -> a.getSeverity() == RuleSeverity.VIOLATION ? a : b))
+                .values().stream().toList();
 
         if (categoryRules.isEmpty()) {
             return null; // signal: no coverage, caller should invoke the LLM fallback
@@ -60,11 +65,11 @@ public class RuleEngineService {
                         : input.getAmount();
 
                 if (comparable.compareTo(rule.getLimitAmount()) > 0) {
+                    BigDecimal excess = comparable.subtract(rule.getLimitAmount()).setScale(0, java.math.RoundingMode.HALF_UP);
                     triggered.add(rule);
                     worst = worse(worst, toComplianceLevel(rule.getSeverity()));
-                    summaries.add("%s — %s 한도 ₩%s을 ₩%s 초과했습니다"
-                            .formatted(rule.getClauseArticle(), scopeLabel(rule.getScope()),
-                                    rule.getLimitAmount().toPlainString(), comparable.toPlainString()));
+                    summaries.add("%s — %s 한도를 ₩%s 초과했습니다"
+                            .formatted(rule.getClauseArticle(), scopeLabel(rule.getScope()), excess.toPlainString()));
                 } else if (comparable.compareTo(rule.getLimitAmount().multiply(WARNING_THRESHOLD_RATIO)) >= 0) {
                     triggered.add(rule);
                     worst = worse(worst, ComplianceLevel.WARNING);

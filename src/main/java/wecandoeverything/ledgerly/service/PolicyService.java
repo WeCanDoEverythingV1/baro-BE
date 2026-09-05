@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import wecandoeverything.ledgerly.domain.*;
+import wecandoeverything.ledgerly.dto.PolicyExtractionResult;
 import wecandoeverything.ledgerly.dto.PolicyRuleDto;
 import wecandoeverything.ledgerly.dto.PolicyRulesetDto;
 import wecandoeverything.ledgerly.exception.*;
@@ -26,18 +27,23 @@ public class PolicyService {
     private final PolicyRulesetRepository rulesetRepository;
     private final PolicyRuleRepository ruleRepository;
     private final ApprovalRequestRepository approvalRequestRepository;
+    private final PolicyExtractionService policyExtractionService;
 
     @Transactional
-    public PolicyRulesetDto create(MultipartFile file) {
+    public PolicyRulesetDto create(MultipartFile file, boolean force) {
         if (!"application/pdf".equals(file.getContentType())) {
             throw new UnsupportedFileTypeException(file.getContentType());
         }
 
         String hash = sha256(file);
-        Optional<PolicyRuleset> existing = rulesetRepository.findBySourceFileHash(hash);
-        if (existing.isPresent()) {
-            return toDto(existing.get(), ruleRepository.findByRulesetId(existing.get().getId()));
+        if (!force) {
+            Optional<PolicyRuleset> existing = rulesetRepository.findBySourceFileHash(hash);
+            if (existing.isPresent()) {
+                return toDto(existing.get(), ruleRepository.findByRulesetId(existing.get().getId()));
+            }
         }
+
+        PolicyExtractionResult extraction = policyExtractionService.extract(file);
 
         int nextVersion = rulesetRepository.findAllByOrderByVersionDesc().stream()
                 .findFirst().map(r -> r.getVersion() + 1).orElse(1);
@@ -48,47 +54,16 @@ public class PolicyService {
                 .status(PolicyRulesetStatus.DRAFT)
                 .sourceFileName(file.getOriginalFilename())
                 .sourceFileHash(hash)
-                .pageCount(null) // filled in once real extraction (Step 4) reads the PDF
-                .unmappedClauses(List.of())
+                .pageCount(extraction.pageCount())
+                .unmappedClauses(extraction.unmappedClauses())
                 .build());
 
-        // Stub rules — Step 4 replaces this block with real Gemini extraction.
-        // Kept here only so the frontend can be wired and tested end-to-end now.
-        List<PolicyRule> stubRules = List.of(
-                PolicyRule.builder()
-                        .ruleset(ruleset)
-                        .expenseCategory(ExpenseCategory.MEALS)
-                        .scope(RuleScope.PER_PERSON)
-                        .limitAmount(new java.math.BigDecimal("70000"))
-                        .conditions(new RuleConditions(null, null, null))
-                        .requiredEvidence(List.of("참석자 명단"))
-                        .prohibitions(List.of())
-                        .severity(RuleSeverity.VIOLATION)
-                        .note(null)
-                        .clauseArticle("제12조 1항")
-                        .clauseText("임직원의 업무 관련 식사비는 1인 1회 70,000원을 초과하지 아니한다.")
-                        .clausePage(4)
-                        .confidence(0.94)
-                        .build(),
-                PolicyRule.builder()
-                        .ruleset(ruleset)
-                        .expenseCategory(ExpenseCategory.MEALS)
-                        .scope(RuleScope.PER_RECEIPT)
-                        .limitAmount(null)
-                        .conditions(new RuleConditions(false, 22, null))
-                        .requiredEvidence(List.of("부서장 사전 승인"))
-                        .prohibitions(List.of())
-                        .severity(RuleSeverity.WARNING)
-                        .note(null)
-                        .clauseArticle("제12조 3항")
-                        .clauseText("22시 이후 발생한 식사비는 부서장의 사전 승인을 받은 경우에 한하여 정산한다.")
-                        .clausePage(4)
-                        .confidence(0.81)
-                        .build()
-        );
-        ruleRepository.saveAll(stubRules);
+        List<PolicyRule> rules = extraction.rules().stream()
+                .map(r -> r.toBuilder().ruleset(ruleset).build())
+                .toList();
+        ruleRepository.saveAll(rules);
 
-        return toDto(ruleset, stubRules);
+        return toDto(ruleset, rules);
     }
 
     public List<PolicyRulesetDto> getAll() {
@@ -146,6 +121,10 @@ public class PolicyService {
     public void delete(String id) {
         PolicyRuleset ruleset = rulesetRepository.findById(id)
                 .orElseThrow(() -> new PolicyRulesetNotFoundException(id));
+
+        if (ruleset.getStatus() == PolicyRulesetStatus.ACTIVE) {
+            throw new PolicyRulesetActiveException(id);
+        }
 
         long referencingCount = approvalRequestRepository.countByRulesetVersion(ruleset.getVersion());
         if (referencingCount > 0) {

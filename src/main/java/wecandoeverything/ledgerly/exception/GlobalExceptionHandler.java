@@ -110,7 +110,8 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), null);
     }
 
-    @ExceptionHandler({PolicyRulesetArchivedException.class, PolicyRulesetNoRulesException.class, PolicyRulesetInUseException.class})
+    @ExceptionHandler({PolicyRulesetArchivedException.class, PolicyRulesetNoRulesException.class,
+            PolicyRulesetInUseException.class, PolicyRulesetActiveException.class})
     public ResponseEntity<ErrorResponseDto> handleRulesetConflict(RuntimeException ex) {
         log.warn(ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), null);
@@ -126,6 +127,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponseDto> handleNoActivePolicy(NoActivePolicyException ex) {
         log.warn(ex.getMessage());
         return build(HttpStatus.CONFLICT, ex.getMessage(), null);
+    }
+
+    @ExceptionHandler(PolicyExtractionFailedException.class)
+    public ResponseEntity<ErrorResponseDto> handleExtractionFailed(PolicyExtractionFailedException ex) {
+        log.warn(ex.getMessage());
+        return build(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), null);
     }
 
     private ResponseEntity<ErrorResponseDto> build(HttpStatus status, String message, Map<String, String> fieldErrors) {

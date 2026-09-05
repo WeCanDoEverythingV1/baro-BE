@@ -31,8 +31,10 @@ public class PolicyController {
 
     @Operation(summary = "Upload a policy PDF and extract a draft ruleset")
     @PostMapping(consumes = "multipart/form-data")
-    public ResponseEntity<PolicyRulesetDto> create(@RequestParam("file") MultipartFile file) {
-        return ResponseEntity.ok(policyService.create(file));
+    public ResponseEntity<PolicyRulesetDto> create(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "force", required = false, defaultValue = "false") boolean force) {
+        return ResponseEntity.ok(policyService.create(file, force));
     }
 
     @Operation(summary = "List all rulesets, newest version first")
