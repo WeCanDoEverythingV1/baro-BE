@@ -104,6 +104,30 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred", null);
     }
 
+    @ExceptionHandler(PolicyRulesetNotFoundException.class)
+    public ResponseEntity<ErrorResponseDto> handleRulesetNotFound(PolicyRulesetNotFoundException ex) {
+        log.warn(ex.getMessage());
+        return build(HttpStatus.NOT_FOUND, ex.getMessage(), null);
+    }
+
+    @ExceptionHandler({PolicyRulesetArchivedException.class, PolicyRulesetNoRulesException.class, PolicyRulesetInUseException.class})
+    public ResponseEntity<ErrorResponseDto> handleRulesetConflict(RuntimeException ex) {
+        log.warn(ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), null);
+    }
+
+    @ExceptionHandler(UnsupportedFileTypeException.class)
+    public ResponseEntity<ErrorResponseDto> handleUnsupportedFileType(UnsupportedFileTypeException ex) {
+        log.warn(ex.getMessage());
+        return build(HttpStatus.UNSUPPORTED_MEDIA_TYPE, ex.getMessage(), null);
+    }
+
+    @ExceptionHandler(NoActivePolicyException.class)
+    public ResponseEntity<ErrorResponseDto> handleNoActivePolicy(NoActivePolicyException ex) {
+        log.warn(ex.getMessage());
+        return build(HttpStatus.CONFLICT, ex.getMessage(), null);
+    }
+
     private ResponseEntity<ErrorResponseDto> build(HttpStatus status, String message, Map<String, String> fieldErrors) {
         ErrorResponseDto body = ErrorResponseDto.builder()
                 .timestamp(Instant.now())

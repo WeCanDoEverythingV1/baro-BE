@@ -1,8 +1,8 @@
 package wecandoeverything.ledgerly.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.ObjectMapper;
 import wecandoeverything.ledgerly.domain.ApprovalRequest;
 import wecandoeverything.ledgerly.domain.ExpenseCategory;
 import wecandoeverything.ledgerly.domain.RiskLevel;
@@ -43,7 +43,7 @@ public class RiskAnalysisService {
 
     private final GeminiClient geminiClient;
     private final ApprovalRequestRepository repository;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper;
 
     // ---------- Approver's list view: batch, entities already persisted ----------
 

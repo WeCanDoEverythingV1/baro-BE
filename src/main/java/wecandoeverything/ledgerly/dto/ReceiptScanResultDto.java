@@ -18,6 +18,7 @@ public class ReceiptScanResultDto {
     private String category;
     private boolean possibleDuplicate;
     private String duplicateNote; // null when no duplicate found
-    private RiskLevel risk;
+    private RiskAnalysisDto risk;
+    private PolicyEvaluationResultDto policyCheck; // null when no active ruleset
 
 }

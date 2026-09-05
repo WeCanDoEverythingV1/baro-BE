@@ -14,4 +14,6 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
     List<ApprovalRequest> findByMerchantIgnoreCaseAndAmount(String merchant, BigDecimal amount);
 
     boolean existsByEmployeeNameIgnoreCaseAndMerchantIgnoreCase(String employeeName, String merchant);
+
+    long countByRulesetVersion(Integer rulesetVersion);
 }

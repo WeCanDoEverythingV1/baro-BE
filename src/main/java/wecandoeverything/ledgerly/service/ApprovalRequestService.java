@@ -8,6 +8,7 @@ import wecandoeverything.ledgerly.domain.ApprovalRequest;
 import wecandoeverything.ledgerly.domain.ApprovalStatus;
 import wecandoeverything.ledgerly.dto.ApprovalRequestCreateDto;
 import wecandoeverything.ledgerly.dto.ApprovalRequestResponseDto;
+import wecandoeverything.ledgerly.dto.PolicyEvaluationInputDto;
 import wecandoeverything.ledgerly.dto.RiskAnalysisDto;
 import wecandoeverything.ledgerly.exception.ApprovalRequestNotFoundException;
 import wecandoeverything.ledgerly.repository.ApprovalRequestRepository;
@@ -22,6 +23,7 @@ public class ApprovalRequestService {
 
     private final ApprovalRequestRepository repository;
     private final RiskAnalysisService riskAnalysisService;
+    private final PolicyEvaluationService policyEvaluationService;
 
     @Transactional
     public ApprovalRequestResponseDto create(ApprovalRequestCreateDto dto) {
@@ -31,13 +33,40 @@ public class ApprovalRequestService {
                 .date(dto.getDate())
                 .amount(dto.getAmount())
                 .itemName(dto.getItemName())
+                .category(dto.getExpenseCategory())
                 .purpose(dto.getPurpose())
                 .status(ApprovalStatus.PENDING)
-                .category(dto.getExpenseCategory())
                 .build();
+
+        applyCompliance(entity);
 
         ApprovalRequest saved = repository.save(entity);
         return toResponseDto(saved, null);
+    }
+
+    private void applyCompliance(ApprovalRequest entity) {
+        try {
+            PolicyEvaluationInputDto input = new PolicyEvaluationInputDto();
+            input.setMerchant(entity.getMerchant());
+            input.setItemName(entity.getItemName());
+            input.setPurpose(entity.getPurpose());
+            input.setCategory(entity.getCategory());
+            input.setAmount(entity.getAmount());
+            input.setDate(entity.getDate());
+            // attendeeCount/hour: not collected on this form yet — left null,
+            // meaning PER_PERSON rules divide by 1 and time-of-day checks skip.
+
+            policyEvaluationService.evaluate(input).ifPresent(result -> {
+                entity.setComplianceLevel(result.getLevel());
+                entity.setComplianceSummary(result.getSummary());
+                entity.setCitedClauses(result.getCitedClauses());
+                entity.setRulesetVersion(result.getRulesetVersion());
+            });
+            // Optional.empty() = no active ruleset → all 4 fields stay null, as specified
+        } catch (Exception e) {
+            // A submission must never fail just because policy evaluation broke —
+            // fields simply stay null, same as "no active ruleset."
+        }
     }
 
     public List<ApprovalRequestResponseDto> getPending() {

@@ -6,7 +6,9 @@ import org.springframework.web.multipart.MultipartFile;
 import tools.jackson.databind.ObjectMapper;
 import wecandoeverything.ledgerly.domain.ApprovalRequest;
 import wecandoeverything.ledgerly.domain.ExpenseCategory;
+import wecandoeverything.ledgerly.dto.PolicyEvaluationInputDto;
 import wecandoeverything.ledgerly.dto.ReceiptScanResultDto;
+import wecandoeverything.ledgerly.dto.RiskAnalysisDto;
 import wecandoeverything.ledgerly.exception.ReceiptUnreadableException;
 import wecandoeverything.ledgerly.repository.ApprovalRequestRepository;
 
@@ -32,9 +34,10 @@ public class ReceiptScanService {
     private final GeminiClient geminiClient;
     private final ApprovalRequestRepository approvalRequestRepository;
     private final RiskAnalysisService riskAnalysisService;
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final PolicyEvaluationService policyEvaluationService;
+    private final ObjectMapper mapper;
 
-    public ReceiptScanResultDto scan(MultipartFile file) {
+    public ReceiptScanResultDto scan(MultipartFile file, String employeeName) {
         validate(file);
         String base64 = encode(file);
 
@@ -56,7 +59,7 @@ public class ReceiptScanService {
                   Be specific where the receipt gives any hint, but keep it
                   brief — one short phrase. This is a draft suggestion the
                   employee will review and can edit, not a claim of fact.
-                
+
                 Write in korean.
                 """;
 
@@ -75,7 +78,9 @@ public class ReceiptScanService {
 
         String json = geminiClient.generate(prompt, schema, file.getContentType(), base64);
         ReceiptScanResultDto result = toDto(json);
-        return applyDuplicateCheck(result);
+        result = applyDuplicateCheck(result);
+        result = applyRiskAnalysis(result, employeeName);
+        return applyPolicyCheck(result);
     }
 
     private ReceiptScanResultDto applyDuplicateCheck(ReceiptScanResultDto result) {
@@ -91,9 +96,43 @@ public class ReceiptScanService {
 
         return result.toBuilder()
                 .possibleDuplicate(true)
-                .duplicateNote("비슷한 요청" + result.getMerchant() +
-                        " (₩`" + result.getAmount().intValue() + ") 이 이미 있습니다.")
+                .duplicateNote("비슷한 요청 " + result.getMerchant() +
+                        " (₩" + result.getAmount().intValue() + ") 이 이미 있습니다.")
                 .build();
+    }
+
+    private ReceiptScanResultDto applyRiskAnalysis(ReceiptScanResultDto result, String employeeName) {
+        try {
+            RiskAnalysisDto risk = riskAnalysisService.analyzeDraft(
+                    employeeName,
+                    result.getMerchant(),
+                    ExpenseCategory.valueOf(result.getCategory()),
+                    result.getAmount(),
+                    result.getItemName(),
+                    result.getPurpose(),
+                    result.getDate());
+            return result.toBuilder().risk(risk).build();
+        } catch (Exception e) {
+            return result; // don't fail the scan if risk analysis has an issue
+        }
+    }
+
+    private ReceiptScanResultDto applyPolicyCheck(ReceiptScanResultDto result) {
+        try {
+            PolicyEvaluationInputDto input = new PolicyEvaluationInputDto();
+            input.setMerchant(result.getMerchant());
+            input.setItemName(result.getItemName());
+            input.setPurpose(result.getPurpose());
+            input.setCategory(ExpenseCategory.valueOf(result.getCategory()));
+            input.setAmount(result.getAmount());
+            input.setDate(result.getDate());
+
+            return policyEvaluationService.evaluate(input)
+                    .map(pc -> result.toBuilder().policyCheck(pc).build())
+                    .orElse(result);
+        } catch (Exception e) {
+            return result; // scan result is still fine without this
+        }
     }
 
     private void validate(MultipartFile file) {

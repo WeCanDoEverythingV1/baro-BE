@@ -22,7 +22,9 @@ public class ReceiptScanController {
 
     @Operation(summary = "Scan a receipt file")
     @PostMapping(value = "/scan", consumes = "multipart/form-data")
-    public ResponseEntity<ReceiptScanResultDto> scan(@RequestParam("file") MultipartFile file) {
-        return ResponseEntity.ok(receiptScanService.scan(file));
+    public ResponseEntity<ReceiptScanResultDto> scan(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("employeeName") String employeeName) {
+        return ResponseEntity.ok(receiptScanService.scan(file, employeeName));
     }
 }

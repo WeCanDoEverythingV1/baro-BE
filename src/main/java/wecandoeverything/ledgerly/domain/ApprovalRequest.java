@@ -7,9 +7,11 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import wecandoeverything.ledgerly.domain.converter.CitedClauseListConverter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Entity
 @Table(name = "approval_requests")
@@ -49,6 +51,20 @@ public class ApprovalRequest extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ExpenseCategory category;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "compliance_level")
+    private ComplianceLevel complianceLevel; // null = no active ruleset when submitted
+
+    @Column(name = "compliance_summary", length = 500)
+    private String complianceSummary;
+
+    @Convert(converter = CitedClauseListConverter.class)
+    @Column(name = "cited_clauses", columnDefinition = "TEXT")
+    private List<CitedClause> citedClauses;
+
+    @Column(name = "ruleset_version")
+    private Integer rulesetVersion;
 
     @PrePersist
     protected void onCreate() {
